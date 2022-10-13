@@ -10,7 +10,7 @@ import (
 
 func Pagination() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		Page, isPageOk := c.GetQuery(keys.UserID)
+		Page, isPageOk := c.GetQuery(keys.PageKey)
 		PageSize, isPageSizeOk := c.GetQuery(keys.PageSizeKey)
 		if !isPageOk || !isPageSizeOk {
 			c.AbortWithStatus(http.StatusBadRequest)
