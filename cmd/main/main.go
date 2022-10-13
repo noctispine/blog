@@ -17,6 +17,9 @@ import (
 var db *gorm.DB
 var authHandler *handlers.AuthHandler
 var postHandler *handlers.PostHandler
+var categoryHandler *handlers.CategoryHandler
+var tagHandler *handlers.TagHandler
+var postCategoryHandler *handlers.PostCategoryHandler
 var ctx context.Context
 
 
@@ -29,6 +32,9 @@ func init() {
 	db = dbPackage.GetDatabase()
 	authHandler = handlers.NewAuthHandler(ctx, db)
 	postHandler = handlers.NewPostHandler(ctx, db)
+	categoryHandler = handlers.NewCategoryHandler(ctx, db)
+	tagHandler = handlers.NewTagHandler(ctx, db)
+	postCategoryHandler = handlers.NewPostCategoryHandler(ctx, db)
 }
 
 
@@ -45,25 +51,55 @@ func main() {
 	posts := r.Group("/posts")
 	{
 		posts.GET("/all", postHandler.GetAll)
-		posts.GET("/", middlewares.Pagination(), postHandler.GetPage)
+		posts.GET("", middlewares.Pagination(), postHandler.GetPage)
+		posts.GET(":id", middlewares.Pagination(), postHandler.GetPageByCategory)
+	}
+
+	categories := r.Group("/categories")
+	{
+		categories.GET("", categoryHandler.GetAll)
+	}
+
+	tags := r.Group("/tags")
+	{
+		tags.GET("", tagHandler.GetAll)
 	}
 
 	
 
 	blogger := r.Group("/", middlewares.ValidateToken(), middlewares.Authorization(roles.BLOGGER_PERMS))
 	{
-		bloggerPost := blogger.Group("/posts")
+		bloggerPost := blogger.Group("posts")
 		{
 			bloggerPost.POST("", postHandler.Create)
 			bloggerPost.PATCH("", postHandler.Update)
 			bloggerPost.DELETE(":id", postHandler.Delete)
+			bloggerPost.PATCH(":id", postHandler.TogglePublish)
+		}
+
+		bloggerPostCategory := blogger.Group("post-category", middlewares.PostMatchesWithUser(db))
+		{
+			bloggerPostCategory.POST("", postCategoryHandler.Create)
+			bloggerPostCategory.DELETE("", postCategoryHandler.Delete)
 		}
 	}
 
-	// admin := r.Group("/", middlewares.ValidateToken(), middlewares.Authorization(constants.ADMIN_PERMS) )
-	// {
-	// 	_ = admin.Group("posts")
-	// }
+	admin := r.Group("/", middlewares.ValidateToken(), middlewares.Authorization(roles.ADMIN_PERMS) )
+	{
+		adminCategory := admin.Group("categories")
+		{
+			adminCategory.POST("", categoryHandler.Create)
+			adminCategory.DELETE(":id", categoryHandler.Delete)
+			adminCategory.PATCH("", categoryHandler.Update)
+		}
+
+		adminTag := admin.Group("tags")
+		{
+			adminTag.POST("", tagHandler.Create)
+			adminTag.DELETE(":id", tagHandler.Delete)
+			adminTag.PATCH("", tagHandler.Update)
+		}
+	}
 	
 	if os.Getenv("APP_ENV") == "PROD" {
 		log.Fatal(r.Run(":" + os.Getenv("PROD_PORT")))
