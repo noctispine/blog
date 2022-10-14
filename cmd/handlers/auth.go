@@ -212,6 +212,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("email"))
 			return
 		}
+		
 		c.AbortWithStatus(http.StatusBadRequest)
 		log.Error(fmt.Errorf("while registering: %w", err))
 		return
