@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,7 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/jackc/pgerrcode"
 	"github.com/noctispine/blog/cmd/models"
+	"github.com/noctispine/blog/pkg/responses"
+	"github.com/noctispine/blog/pkg/utils"
+	"github.com/noctispine/blog/pkg/wrappers"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -41,7 +47,7 @@ func NewAuthHandler(ctx context.Context, db *gorm.DB) *AuthHandler{
 
 func hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return string(bytes), err
+	return string(bytes), fmt.Errorf("error while hashing password: %w", err)
 }
 
 func checkPasswordHash(password, hashedPassword string) bool {
@@ -54,41 +60,35 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 	var dbUser models.UserAccount
 
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error()})
-
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	
 	if err := validate.Struct(user); err != nil {
-		errs := translateError(err, enTrans)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
-		return
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 	}
 
 	if err := h.db.Where("email = ?", user.Email).First(&dbUser).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "user not found"})
+			responses.AbortWithStatusJSONError(c, http.StatusUnauthorized, wrappers.NewErrNotFound("user"))
 			return
 		}
 		
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(err.Error())
 		return
 	}
 
 	if !checkPasswordHash(user.Password, dbUser.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "Wrong Credentials"})
 		return
 	}
 
 	expireInMinutes, err := strconv.Atoi(os.Getenv("JWT_EXPIRE_MINUTES"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		log.Error(fmt.Errorf("jwt conversion to int: %w", err))
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
@@ -105,16 +105,16 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(fmt.Errorf("jwt signed string: %w", err))
 		return
 	}
 
 	dbUser.LastLoginAt = time.Now()
 
 	if err := h.db.Save(&dbUser).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})	
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(err.Error())
 		return
 	}
 
@@ -141,25 +141,22 @@ func (h *AuthHandler) RefreshHandler(c *gin.Context) {
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Token is expired"})
+			responses.AbortWithStatusJSONError(c, http.StatusUnauthorized, fmt.Errorf("token is expired"))
 			return
 		} 
 
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusUnauthorized)
+		log.Error(fmt.Errorf("error while parsing claims: %w", err))
 		return
 	}
 
 	if tkn == nil || !tkn.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid token"})
+		responses.AbortWithStatusJSONError(c, http.StatusUnauthorized, fmt.Errorf("invalid token"))
 		return
 	}
 
 	if  time.Until(claims.ExpiresAt.Time).Minutes()  > 5 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Token is not expired yet"})
+		responses.AbortWithStatusJSONError(c, http.StatusBadRequest, fmt.Errorf("token is not expired yet"))
 		return
 	}
 
@@ -169,8 +166,8 @@ func (h *AuthHandler) RefreshHandler(c *gin.Context) {
 
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(err)
 		return
 	}
 
@@ -182,23 +179,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var user models.SignUpUser
 
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusBadRequest)
+		log.Error(err)
 		return
 	}
 
 
 	if err := validate.Struct(user); err != nil {
-		errs := translateError(err, enTrans)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
 	hashedPassword, err := hashPassword(user.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(err.Error())
 		return
 	}
 
@@ -213,8 +208,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&newUser).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error()})
+		if utils.CheckPostgreError(err, pgerrcode.UniqueViolation) {
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("email"))
+			return
+		}
+		c.AbortWithStatus(http.StatusBadRequest)
+		log.Error(fmt.Errorf("while registering: %w", err))
 		return
 	}
 	c.Status(http.StatusCreated)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +10,7 @@ import (
 	dbPackage "github.com/noctispine/blog/cmd/db"
 	"github.com/noctispine/blog/cmd/handlers"
 	"github.com/noctispine/blog/pkg/middlewares"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +24,8 @@ var ctx context.Context
 
 
 func init() {
+	log.SetFormatter(&log.JSONFormatter{})
+	
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -35,6 +37,7 @@ func init() {
 	categoryHandler = handlers.NewCategoryHandler(ctx, db)
 	tagHandler = handlers.NewTagHandler(ctx, db)
 	postCategoryHandler = handlers.NewPostCategoryHandler(ctx, db)
+
 }
 
 
