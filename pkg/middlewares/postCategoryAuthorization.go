@@ -9,6 +9,7 @@ import (
 	"github.com/noctispine/blog/pkg/constants/keys"
 	"github.com/noctispine/blog/pkg/responses"
 	"github.com/noctispine/blog/pkg/wrappers"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,7 @@ func PostMatchesWithUser(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		if err := db.First(&post, postId).Error; err != nil {
+			log.Error(err)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("post"))
 				return
@@ -32,7 +34,7 @@ func PostMatchesWithUser(db *gorm.DB) gin.HandlerFunc {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-	
+
 		if post.UserID != c.GetInt64(keys.UserID) {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
