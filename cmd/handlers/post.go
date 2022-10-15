@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
 
@@ -11,8 +10,11 @@ import (
 	"github.com/noctispine/blog/cmd/models"
 	"github.com/noctispine/blog/pkg/constants/keys"
 	"github.com/noctispine/blog/pkg/pagination"
+	"github.com/noctispine/blog/pkg/responses"
 	"github.com/noctispine/blog/pkg/scopes"
 	"github.com/noctispine/blog/pkg/utils"
+	"github.com/noctispine/blog/pkg/wrappers"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -38,8 +40,8 @@ func (h *PostHandler) GetAll(c *gin.Context) {
 	}
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error()})
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(result.Error)
 		return
 	}
 
@@ -57,7 +59,7 @@ func (h *PostHandler) GetPage(c *gin.Context) {
 	}
 
 	if result.Error != nil {
-		log.Println(result.Error)
+		log.Error(result.Error)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -83,17 +85,14 @@ func (h *PostHandler) GetPageByCategory(c *gin.Context) {
 func (h *PostHandler) Create(c *gin.Context) {
 	var post models.Post
 	if err := c.ShouldBindJSON(&post); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	post.UserID = c.GetInt64("userId")
 
 	if err := validate.Struct(post); err != nil {
-		errs := translateError(err, enTrans)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -101,12 +100,11 @@ func (h *PostHandler) Create(c *gin.Context) {
 
 	if err := h.db.Omit("id", "created_at", "updated_at", "published_at", "is_published").Create(&post).Error; err != nil {
 		if utils.CheckPostgreError(err, pgerrcode.UniqueViolation) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "The title is already exists"})
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("post"))
 			return
 		}
 		
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -119,27 +117,23 @@ func (h *PostHandler) Update(c *gin.Context) {
 
 
 	if err := c.ShouldBindJSON(&updatePost); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error()})
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	if err := validate.Struct(updatePost); err != nil {
-		errs := translateError(err, enTrans)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var post models.Post
 	if err := h.db.Model(&models.Post{}).Where("id = ?", updatePost.ID).First(&post).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "post doesnt exist"})
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("post"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -151,8 +145,13 @@ func (h *PostHandler) Update(c *gin.Context) {
 	}
 	
 	if err := h.db.Model(&models.Post{}).Where("user_id = ?", c.GetInt64(keys.UserID)).Omit("id", "created_at", "user_id").Updates(&updatePost).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error()})
+		if err != gorm.ErrRecordNotFound {
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("post"))
+			return
+		}
+
+		c.AbortWithStatus(http.StatusInternalServerError)
+		log.Error(err)
 		return
 	}
 
@@ -170,18 +169,22 @@ func (h *PostHandler) TogglePublish(c *gin.Context) {
 	var post models.Post
 	if err := h.db.Model(&models.Post{}).Where("user_id = ? AND id = ?", c.GetInt64(keys.UserID), postId).First(&post).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "post doesnt exist"})
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("post"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
 	if err := h.db.Model(&models.Post{}).Where("user_id = ? AND id = ?", c.GetInt64(keys.UserID), postId).Update("is_published", !post.IsPublished).Error; err != nil {
-		log.Println(err.Error())
+		if err == gorm.ErrRecordNotFound {
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrNotFound("post"))
+			return
+		}
+
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -199,12 +202,11 @@ func (h *PostHandler) Delete(c *gin.Context) {
 	
 	if err := h.db.Where("user_id = ?", c.GetInt64(keys.UserID)).Delete(&models.Post{}, postId).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "post doesnt exist"})
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("post"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}

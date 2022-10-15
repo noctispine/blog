@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/noctispine/blog/cmd/models"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -40,7 +40,7 @@ func (h *PostCategoryHandler) Create(c *gin.Context) {
 	if err := h.db.Table("post_category").Create(map[string]interface{}{
 		"post_id": postId, "category_id": categoryId,
 	  }).Error; err != nil {
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -64,7 +64,7 @@ func (h *PostCategoryHandler) Delete(c *gin.Context) {
 
 
 	if err := h.db.Table("post_category").Where("post_id = ? AND category_id = ?", postId, categoryId).Delete(&models.PostCategory{}).Error; err != nil {
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -72,27 +72,3 @@ func (h *PostCategoryHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 
 }
-
-
-
-// func (h *PostCategoryHandler) Delete(c *gin.Context) {
-// 	postCategoryId := c.Params.ByName("id")
-// 	if postCategoryId == "" {
-// 		c.AbortWithStatus(http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	result := h.db.Model(&models.PostCategory{}).Delete(&models.PostCategory{}, postCategoryId)
-	
-// 	if result.RowsAffected == 0 {
-// 		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("post-category"))
-// 		return
-// 	}
-
-// 	if result.Error != nil {
-// 		c.AbortWithStatus(http.StatusInternalServerError)
-// 		return
-// 	}
-	
-// 	c.Status(http.StatusNoContent)
-// }
