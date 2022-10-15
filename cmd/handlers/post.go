@@ -200,13 +200,15 @@ func (h *PostHandler) Delete(c *gin.Context) {
 		return
 	}
 	
-	if err := h.db.Where("user_id = ?", c.GetInt64(keys.UserID)).Delete(&models.Post{}, postId).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("post"))
-			return
-		}
+	result := h.db.Where("user_id = ?", c.GetInt64(keys.UserID)).Delete(&models.Post{}, postId)
 
-		log.Error(err)
+	if result.RowsAffected == 0 {
+		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("post"))
+		return
+	}
+
+	if result.Error != nil {
+		log.Error(result.Error)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
