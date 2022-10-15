@@ -47,7 +47,10 @@ func NewAuthHandler(ctx context.Context, db *gorm.DB) *AuthHandler{
 
 func hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return string(bytes), fmt.Errorf("error while hashing password: %w", err)
+	if err != nil {
+		return string(bytes),  fmt.Errorf("error while hashing password: %w", err)
+	}
+	return string(bytes), nil
 }
 
 func checkPasswordHash(password, hashedPassword string) bool {
