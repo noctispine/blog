@@ -2,14 +2,15 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgerrcode"
 	"github.com/noctispine/blog/cmd/models"
+	"github.com/noctispine/blog/pkg/responses"
 	"github.com/noctispine/blog/pkg/utils"
 	"github.com/noctispine/blog/pkg/wrappers"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +36,7 @@ func (h *CategoryHandler) GetAll(c *gin.Context) {
 	}
 
 	if result.Error != nil {
-		log.Println(result.Error.Error())
+		log.Error(result.Error)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -52,9 +53,7 @@ func (h *CategoryHandler) Create(c *gin.Context) {
 	}
 
 	if err := validate.Struct(newCategory); err != nil {
-		errs := translateError(err, enTrans)
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -62,12 +61,11 @@ func (h *CategoryHandler) Create(c *gin.Context) {
 
 	if err := h.db.Omit("id").Save(&newCategory).Error; err != nil {
 		if utils.CheckPostgreError(err, pgerrcode.UniqueViolation) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "The category already exists"})
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("category"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -82,7 +80,14 @@ func (h *CategoryHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Delete(&models.Category{}, categoryId).Error; err != nil {
+	result := h.db.Delete(&models.Category{}, categoryId); 
+
+	if result.RowsAffected == 0 {
+		responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrNotFound("category"))
+		return
+	}
+	
+	if result.Error != nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -99,22 +104,19 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 	}
 
 	if err := validate.Struct(updateCategory); err != nil {
-		errs := translateError(err, enTrans)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var category models.Category
 	if err := h.db.Model(&models.Category{}).Where("id = ?", updateCategory.ID).First(&category).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": wrappers.NewErrDoesNotExist("category").Error()})
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrDoesNotExist("category"))
 			return
 		}
 
-		log.Println(err.Error())
-		c.AbortWithStatus(http.StatusBadGateway)
+		log.Error(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
@@ -123,7 +125,7 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.db.Model(&models.Category{}).Where("id = ?", updateCategory.ID).Omit("id").Updates(&updateCategory).Error; err != nil {
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
