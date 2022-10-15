@@ -2,13 +2,15 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgerrcode"
 	"github.com/noctispine/blog/cmd/models"
+	"github.com/noctispine/blog/pkg/responses"
 	"github.com/noctispine/blog/pkg/utils"
+	"github.com/noctispine/blog/pkg/wrappers"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -53,9 +55,7 @@ func (h *TagHandler) Create(c *gin.Context) {
 	}
 
 	if err := validate.Struct(&newTag); err != nil {
-		errs := translateError(err, enTrans)
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"errors": stringfyJSONErrArr(errs)})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -63,12 +63,11 @@ func (h *TagHandler) Create(c *gin.Context) {
 
 	if err := h.db.Omit("id").Save(&newTag).Error; err != nil {
 		if utils.CheckPostgreError(err, pgerrcode.UniqueViolation) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "this tag already exists"})
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("tag"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -85,8 +84,7 @@ func (h *TagHandler) Delete(c *gin.Context) {
 
 	if err := h.db.Delete(&models.Tag{}, tagId).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "tag doesnt exist"})
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrDoesNotExist("tag"))
 			return
 		}
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -105,21 +103,18 @@ func (h *TagHandler) Update(c *gin.Context) {
 	}
 
 	if err := validate.Struct(&updateTag); err != nil {
-		errs := translateError(err, enTrans)
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"errors": errs})
+		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var tag models.Tag
 	if err := h.db.Where("id", updateTag.ID).First(&tag).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "Tag doesnt exist"})
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrDoesNotExist("tag"))
 			return
 		}
 
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
@@ -129,7 +124,7 @@ func (h *TagHandler) Update(c *gin.Context) {
 	}
 
 	if err := h.db.Where("id = ?", updateTag.ID).Updates(&updateTag).Error; err != nil {
-		log.Println(err.Error())
+		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
