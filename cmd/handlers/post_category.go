@@ -5,7 +5,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgerrcode"
 	"github.com/noctispine/blog/cmd/models"
+	"github.com/noctispine/blog/pkg/responses"
+	"github.com/noctispine/blog/pkg/utils"
+	"github.com/noctispine/blog/pkg/wrappers"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -40,6 +44,11 @@ func (h *PostCategoryHandler) Create(c *gin.Context) {
 	if err := h.db.Table("post_category").Create(map[string]interface{}{
 		"post_id": postId, "category_id": categoryId,
 	  }).Error; err != nil {
+		if utils.CheckPostgreError(err, pgerrcode.UniqueViolation){
+			responses.AbortWithStatusJSONError(c, http.StatusBadRequest, wrappers.NewErrAlreadyExists("category"))
+			return
+		}
+		
 		log.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
