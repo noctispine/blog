@@ -44,6 +44,7 @@ func init() {
 
 func main() {
 	r := gin.Default()
+	r.Use(middlewares.CORSMiddleware())
 	user := r.Group("/user")
 	{
 		user.POST("/sign-in", authHandler.SignInHandler)
@@ -54,6 +55,7 @@ func main() {
 	posts := r.Group("/posts")
 	{
 		posts.GET("/all", postHandler.GetAll)
+		posts.GET(":id", postHandler.GetUserPosts)
 		posts.GET("", middlewares.Pagination(), postHandler.GetPage)
 		posts.GET(":id", middlewares.Pagination(), postHandler.GetPageByCategory)
 	}

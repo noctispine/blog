@@ -69,11 +69,12 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 	
 	if err := validate.Struct(user); err != nil {
 		responses.AbortWithStatusJSONValidationErrors(c, http.StatusBadRequest, err)
+		return
 	}
 
 	if err := h.db.Where("email = ?", user.Email).First(&dbUser).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			responses.AbortWithStatusJSONError(c, http.StatusUnauthorized, wrappers.NewErrNotFound("user"))
+			responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("user"))
 			return
 		}
 		

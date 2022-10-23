@@ -68,6 +68,24 @@ func (h *PostHandler) GetPage(c *gin.Context) {
 	c.JSON(http.StatusOK, pagination)
 }
 
+func (h *PostHandler) GetUserPosts(c *gin.Context) {
+	var posts []models.Post
+	userId := c.Params.ByName("id")
+
+	result := h.db.Where("user_id = ? AND is_published = 1", userId).Find(&posts)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		log.Error(result.Error.Error())
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *PostHandler) GetPageByCategory(c *gin.Context) {
 	var posts []models.Post
 	var pagination pagination.Pagination
