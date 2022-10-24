@@ -40,8 +40,6 @@ func init() {
 
 }
 
-
-
 func main() {
 	r := gin.Default()
 	r.Use(middlewares.CORSMiddleware())
@@ -49,13 +47,14 @@ func main() {
 	{
 		user.POST("/sign-in", authHandler.SignInHandler)
 		user.POST("/register", authHandler.Register)
+		user.POST("/reauthenticate", authHandler.ReAuthenticate, middlewares.ValidateToken())
 		user.POST("/refresh/:id", authHandler.RefreshHandler)
 	}
 
 	posts := r.Group("/posts")
 	{
 		posts.GET("/all", postHandler.GetAll)
-		posts.GET(":id", postHandler.GetUserPosts)
+		posts.GET("/user/:id", postHandler.GetUserPosts)
 		posts.GET("", middlewares.Pagination(), postHandler.GetPage)
 		posts.GET(":id", middlewares.Pagination(), postHandler.GetPageByCategory)
 	}

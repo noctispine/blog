@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgerrcode"
 	"github.com/noctispine/blog/cmd/models"
+	"github.com/noctispine/blog/pkg/constants/keys"
 	"github.com/noctispine/blog/pkg/responses"
 	"github.com/noctispine/blog/pkg/utils"
 	"github.com/noctispine/blog/pkg/wrappers"
@@ -95,7 +96,7 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-
+	
 	expirationTime := time.Now().Add(time.Duration(expireInMinutes) * time.Minute)
 	claims := &Claims{
 		Email: user.Email,
@@ -124,6 +125,7 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": models.UserAccount{
+			ID: dbUser.ID,
 			Email: dbUser.Email,
 			FirstName: dbUser.FirstName,
 			LastName: dbUser.LastName,
@@ -222,4 +224,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusCreated)
+}
+
+func (h *AuthHandler) ReAuthenticate(c *gin.Context) {
+	var user models.UserAccount
+	userId := c.GetString(keys.UserID)
+	result := h.db.Where("id = ?", userId).Find(&user)
+	if result.RowsAffected == 0 {
+		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("user"))
+	}
+
+	c.JSON(http.StatusOK, models.UserAccount{
+		ID: user.ID,
+		FirstName: user.FirstName,
+		IntroDesc: user.IntroDesc,
+		Role: user.Role,
+		ProfileDesc: user.ProfileDesc,
+	})
 }

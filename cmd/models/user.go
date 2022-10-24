@@ -6,15 +6,15 @@ import (
 
 type UserAccount struct {
 	ID int64 `json:"id"`
-	FirstName string
-	LastName string
-	Email string
-	PasswordHash string `json:"omitempty"`
+	FirstName string `json:"firstName"`
+	LastName string `json:"lastName"`
+	Email string `json:"email"`
+	PasswordHash string `json:",omitempty"`
 	RegisteredAt time.Time `json:"-"`
 	LastLoginAt time.Time `json:"-"`
-	IntroDesc string
-	Role int
-	ProfileDesc string	
+	IntroDesc string `json:"introDesc"`
+	Role int `json:"role"`
+	ProfileDesc string `json:"profileDesc"`
 }
 
 // validations
