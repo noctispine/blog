@@ -15,6 +15,7 @@ type UserAccount struct {
 	IntroDesc string `json:"introDesc"`
 	Role int `json:"role"`
 	ProfileDesc string `json:"profileDesc"`
+	IsActive bool `json:"isActive"`
 }
 
 // validations
