@@ -47,10 +47,10 @@ func main() {
 	{
 		user.POST("/sign-in", authHandler.SignInHandler)
 		user.POST("/register", authHandler.Register)
-		user.POST("/reauthenticate", authHandler.ReAuthenticate, middlewares.ValidateToken())
+		user.POST("/reauthenticate", middlewares.ValidateToken(), authHandler.ReAuthenticate)
 		user.POST("/refresh/:id", authHandler.RefreshHandler)
 	}
-
+	
 	posts := r.Group("/posts")
 	{
 		posts.GET("/all", postHandler.GetAll)
@@ -58,19 +58,19 @@ func main() {
 		posts.GET("", middlewares.Pagination(), postHandler.GetPage)
 		posts.GET(":id", middlewares.Pagination(), postHandler.GetPageByCategory)
 	}
-
+	
 	categories := r.Group("/categories")
 	{
 		categories.GET("", categoryHandler.GetAll)
 	}
-
+	
 	tags := r.Group("/tags")
 	{
 		tags.GET("", tagHandler.GetAll)
 	}
-
 	
-
+	
+	
 	blogger := r.Group("/", middlewares.ValidateToken(), middlewares.Authorization(roles.BLOGGER_PERMS))
 	{
 		bloggerPost := blogger.Group("posts")
@@ -80,23 +80,29 @@ func main() {
 			bloggerPost.DELETE(":id", postHandler.Delete)
 			bloggerPost.PATCH(":id", postHandler.TogglePublish)
 		}
-
+		
 		bloggerPostCategory := blogger.Group("post-category", middlewares.PostMatchesWithUser(db))
 		{
 			bloggerPostCategory.POST("", postCategoryHandler.Create)
 			bloggerPostCategory.DELETE("", postCategoryHandler.Delete)
 		}
 	}
-
+	
 	admin := r.Group("/", middlewares.ValidateToken(), middlewares.Authorization(roles.ADMIN_PERMS) )
 	{
+		adminUser := admin.Group("user")
+		{
+			adminUser.GET("/requests", authHandler.GetNonActiveUsers)
+			adminUser.PATCH("/requests/:id",authHandler.ActivateUserAccount)
+		}
+
 		adminCategory := admin.Group("categories")
 		{
 			adminCategory.POST("", categoryHandler.Create)
 			adminCategory.DELETE(":id", categoryHandler.Delete)
 			adminCategory.PATCH("", categoryHandler.Update)
 		}
-
+		
 		adminTag := admin.Group("tags")
 		{
 			adminTag.POST("", tagHandler.Create)
@@ -107,8 +113,8 @@ func main() {
 	
 	if os.Getenv("APP_ENV") == "PROD" {
 		log.Fatal(r.Run(":" + os.Getenv("PROD_PORT")))
-	} else {
-		log.Fatal(r.Run(":" + os.Getenv("DEV_PORT")))
+		} else {
+			log.Fatal(r.Run(":" + os.Getenv("DEV_PORT")))
+		}
 	}
-}
-
+	

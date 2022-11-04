@@ -31,6 +31,7 @@ func ValidateToken() gin.HandlerFunc {
 			return
 		}
 
+
 		c.Set(keys.UserID, claims.UserID)
 		c.Set(keys.UserRole, claims.Role)
 		c.Next()
