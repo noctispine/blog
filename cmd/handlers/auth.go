@@ -84,6 +84,11 @@ func (h *AuthHandler) SignInHandler(c *gin.Context) {
 		return
 	}
 
+	if !dbUser.IsActive {
+		responses.AbortWithStatusJSONError(c, http.StatusBadRequest, fmt.Errorf("user is not activated yet, you can contact via email on home page"))
+		return
+	}
+
 	if !checkPasswordHash(user.Password, dbUser.PasswordHash) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"error": "Wrong Credentials"})
@@ -228,17 +233,71 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 func (h *AuthHandler) ReAuthenticate(c *gin.Context) {
 	var user models.UserAccount
-	userId := c.GetString(keys.UserID)
+	userId := c.GetInt64(keys.UserID)
 	result := h.db.Where("id = ?", userId).Find(&user)
+	
 	if result.RowsAffected == 0 {
 		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("user"))
+		return
+	}
+
+	if result.Error != nil {
+		log.Error(result.Error.Error())
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
 	}
 
 	c.JSON(http.StatusOK, models.UserAccount{
 		ID: user.ID,
 		FirstName: user.FirstName,
+		LastName: user.LastName,
+		Email: user.Email,
 		IntroDesc: user.IntroDesc,
 		Role: user.Role,
 		ProfileDesc: user.ProfileDesc,
 	})
+}
+
+func (h *AuthHandler) GetNonActiveUsers(c *gin.Context) {
+	var users []models.UserAccount
+	result := h.db.Where("is_active = FALSE").Find(&users)
+	
+	if result.RowsAffected == 0 {
+		c.AbortWithStatus(http.StatusNoContent)
+		return
+	}
+
+	if result.Error != nil {
+		log.Error(result.Error.Error())
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
+}
+
+func (h *AuthHandler) ActivateUserAccount(c *gin.Context) {
+	var user models.UserAccount
+	userId := c.Params.ByName("id")
+
+	result := h.db.Where("id = ? AND is_active = FALSE", userId).First(&user)
+	if result.RowsAffected == 0 {
+		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("user"))
+		return
+	}
+
+	if result.Error != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	user.IsActive = true
+
+	if err := h.db.Updates(&user).Error; err != nil {
+		log.Error(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
