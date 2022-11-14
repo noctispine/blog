@@ -56,7 +56,8 @@ func main() {
 		posts.GET("/all", postHandler.GetAll)
 		posts.GET("/user/:id", postHandler.GetUserPosts)
 		posts.GET("", middlewares.Pagination(), postHandler.GetPage)
-		posts.GET(":id", middlewares.Pagination(), postHandler.GetPageByCategory)
+		posts.GET("/category/:id", middlewares.Pagination(), postHandler.GetPageByCategory)
+		posts.GET(":id", postHandler.GetPost)
 	}
 	
 	categories := r.Group("/categories")
@@ -85,6 +86,7 @@ func main() {
 		{
 			bloggerPostCategory.POST("", postCategoryHandler.Create)
 			bloggerPostCategory.DELETE("", postCategoryHandler.Delete)
+			bloggerPostCategory.POST("/batch", postCategoryHandler.BatchCreate)
 		}
 	}
 	

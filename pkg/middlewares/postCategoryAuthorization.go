@@ -18,28 +18,29 @@ func PostMatchesWithUser(db *gorm.DB) gin.HandlerFunc {
 		var post models.Post
 		var postId string
 		var ok bool
+
 		
 		if postId, ok = c.GetQuery("postId"); !ok{
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-
+		
 		if err := db.First(&post, postId).Error; err != nil {
 			log.Error(err)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("post"))
 				return
 			}
-	
+			
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-
+		
 		if post.UserID != c.GetInt64(keys.UserID) {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-
+		
 		c.Next()
 	}
 }

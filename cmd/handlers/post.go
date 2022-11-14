@@ -234,3 +234,29 @@ func (h *PostHandler) Delete(c *gin.Context) {
 	
 	c.Status(http.StatusNoContent)
 }
+
+func (h *PostHandler) GetPost(c *gin.Context) {
+	postId := c.Params.ByName("id")
+	log.Println(c.Request)
+	log.Println(postId)
+
+	if postId == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+	}
+
+	var post models.Post
+	result := h.db.Where("id = ?", postId).First(&post)
+
+	if result.RowsAffected == 0 {
+		responses.AbortWithStatusJSONError(c, http.StatusNotFound, wrappers.NewErrNotFound("post"))
+		return
+	}
+
+	if result.Error != nil {
+		log.Error(result.Error)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, post)
+}
